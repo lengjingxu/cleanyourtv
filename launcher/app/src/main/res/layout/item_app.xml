@@ -41,6 +41,10 @@
             android:ellipsize="end"
             android:textColor="#52FFFFFF"
             android:textSize="@dimen/list_name_size"
+            android:shadowColor="#7A000000"
+            android:shadowRadius="7"
+            android:shadowDx="0"
+            android:shadowDy="2"
             android:fontFamily="@font/outfit_light"
             android:letterSpacing="-0.025"
             android:includeFontPadding="false" />

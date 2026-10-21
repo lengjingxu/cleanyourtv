@@ -1,5 +1,7 @@
 package com.gathin.tvhome;
 
+import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
@@ -200,6 +202,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             h.meta.setVisibility(View.GONE);
         }
         boolean focused = h.row.isFocused();
+        // A rebind can land mid-fade; stop the old one before setting the colour outright.
+        stopInk(h.index);
+        stopInk(h.name);
         h.index.setTextColor(focused ? INK_INDEX_FOCUS : INK_INDEX_REST);
         h.name.setTextColor(focused ? INK_FOCUS : INK_REST);
         h.name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, focused ? FOCUSED_SP : RESTING_SP);
@@ -274,6 +279,32 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         return position >= 0 && position < items.size() ? items.get(position).label : "";
     }
 
+    /**
+     * Fades a text colour to its target. Cheap: one ArgbEvaluator step per frame on a single view,
+     * and the previous fade is cancelled so a fast scroll cannot leave a stale tint behind.
+     */
+    private static void stopInk(TextView view) {
+        Object running = view.getTag(view.getId());
+        if (running instanceof ValueAnimator) {
+            ((ValueAnimator) running).cancel();
+            view.setTag(view.getId(), null);
+        }
+    }
+
+    private static void ink(final TextView view, final int target, long delay, final boolean isName) {
+        // The animator is owned by the holder through the view's tag, so it survives rebinding.
+        Object running = view.getTag(view.getId());
+        if (running instanceof ValueAnimator) ((ValueAnimator) running).cancel();
+        int from = view.getCurrentTextColor();
+        if (from == target) return;
+        ValueAnimator a = ValueAnimator.ofObject(new ArgbEvaluator(), from, target);
+        a.setDuration(delay > 0 ? 240 : 160);
+        a.setStartDelay(delay);
+        a.addUpdateListener(anim -> view.setTextColor((Integer) anim.getAnimatedValue()));
+        a.start();
+        view.setTag(view.getId(), a);
+    }
+
     static final class Holder extends RecyclerView.ViewHolder {
         final View row;
         final TextView index;
@@ -282,6 +313,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         final boolean animations;
         final boolean reducedMotion;
         final float density;
+        /** Colour fades, kept per view so a fast scroll cancels the previous one instead of racing it. */
+        private ValueAnimator nameInk, indexInk;
 
         Holder(View v, TileListener listener, boolean animations, boolean reducedMotion) {
             super(v);
@@ -294,6 +327,22 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             this.density = v.getResources().getDisplayMetrics().density;
 
             row.setOnKeyListener((view, keyCode, event) -> {
+                boolean centre = keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                        || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER;
+                if (centre) {
+                    // Press feedback: the row gives a little under the key and springs back, so
+                    // opening an app starts with a touch rather than a jump.
+                    if (!animations || reducedMotion) return false;
+                    if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                        view.animate().cancel();
+                        view.animate().scaleX(1.43f).scaleY(1.43f).setDuration(90)
+                                .setInterpolator(new DecelerateInterpolator(2f)).start();
+                    } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                        view.animate().scaleX(1.5f).scaleY(1.5f).setDuration(180)
+                                .setInterpolator(new OvershootInterpolator(1.4f)).start();
+                    }
+                    return false;
+                }
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN
                         && keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
@@ -303,14 +352,6 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
             row.setOnFocusChangeListener((view, focused) -> {
                 int pos = getBindingAdapterPosition();
-                index.setTextColor(focused ? INK_INDEX_FOCUS : INK_INDEX_REST);
-                name.setTextColor(focused ? INK_FOCUS : INK_REST);
-
-                // Dock-style growth: the whole row lifts and scales a little, and the name grows
-                // more than the row does, so the selected line reads bigger without the list moving.
-                float rowScale = focused ? 1.5f : 1f;
-                float nameScale = focused ? 1.5f : 1f;
-                float lift = 0f;
 
                 row.animate().cancel();
                 name.animate().cancel();
@@ -324,39 +365,47 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 index.setPivotX(0f);
 
                 if (!animations || reducedMotion) {
-                    row.setScaleX(rowScale);
-                    row.setScaleY(rowScale);
-                    row.setTranslationY(lift);
-                    name.setScaleX(nameScale);
-                    name.setScaleY(nameScale);
+                    row.setScaleX(focused ? 1.5f : 1f);
+                    row.setScaleY(focused ? 1.5f : 1f);
+                    name.setScaleX(focused ? 1.5f : 1f);
+                    name.setScaleY(focused ? 1.5f : 1f);
                     index.setAlpha(focused ? 1f : 0.45f);
                     index.setTranslationX(focused ? 0f : -6f * density);
                     meta.setAlpha(focused ? 1f : 0f);
+                    ink(index, focused ? INK_INDEX_FOCUS : INK_INDEX_REST, 0, false);
+                    ink(name, focused ? INK_FOCUS : INK_REST, 0, true);
                 } else {
-                    // Overshoot on the way in, settle on the way out: the bounce is what makes it
-                    // feel like a dock rather than a layout change.
-                    row.animate().scaleX(rowScale).scaleY(rowScale).translationY(lift)
-                            .setDuration(focused ? 260 : 200)
+                    // Three cues, slightly out of step, so the eye is led rather than hit: the row
+                    // grows, the number steps in, then the name arrives and brightens.
+                    row.animate().scaleX(focused ? 1.5f : 1f).scaleY(focused ? 1.5f : 1f)
+                            .setDuration(focused ? 300 : 200)
                             .setInterpolator(focused
-                                    ? new OvershootInterpolator(1.15f)
-                                    : new DecelerateInterpolator(1.6f))
+                                    ? new OvershootInterpolator(0.9f)
+                                    : new DecelerateInterpolator(1.8f))
                             .withLayer().start();
-                    name.animate().scaleX(nameScale).scaleY(nameScale)
-                            .setDuration(focused ? 300 : 210)
-                            .setInterpolator(focused
-                                    ? new OvershootInterpolator(1.6f)
-                                    : new DecelerateInterpolator(1.6f))
-                            .withLayer().start();
-                    // The number steps in from the gutter, so the eye lands on it before the name.
+
                     index.animate()
                             .alpha(focused ? 1f : 0.45f)
                             .translationX(focused ? 0f : -6f * density)
-                            .setDuration(focused ? 260 : 180)
-                            .setInterpolator(focused
-                                    ? new DecelerateInterpolator(1.4f)
-                                    : new DecelerateInterpolator(1.6f))
+                            .setDuration(focused ? 200 : 170)
+                            .setStartDelay(focused ? 0 : 40)
+                            .setInterpolator(new DecelerateInterpolator(1.6f))
                             .start();
-                    meta.animate().alpha(focused ? 1f : 0f).setDuration(160).start();
+
+                    name.animate().scaleX(focused ? 1.5f : 1f).scaleY(focused ? 1.5f : 1f)
+                            .setDuration(focused ? 320 : 200)
+                            .setStartDelay(focused ? 55 : 0)
+                            .setInterpolator(focused
+                                    ? new OvershootInterpolator(1.25f)
+                                    : new DecelerateInterpolator(1.6f))
+                            .withLayer().start();
+
+                    // Ink crossfades instead of switching, and lags the geometry by a beat: colour
+                    // arriving after the shape is what makes the change feel like light, not CSS.
+                    ink(index, focused ? INK_INDEX_FOCUS : INK_INDEX_REST, focused ? 90 : 0, false);
+                    ink(name, focused ? INK_FOCUS : INK_REST, focused ? 120 : 0, true);
+                    meta.animate().alpha(focused ? 1f : 0f).setDuration(180)
+                            .setStartDelay(focused ? 120 : 0).start();
                 }
                 if (focused && listener != null && pos != RecyclerView.NO_POSITION) {
                     listener.onTileFocused(pos, view);

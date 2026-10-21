@@ -42,6 +42,7 @@ import android.view.SoundEffectConstants;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.animation.AnimationUtils;
+import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LayoutAnimationController;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -264,7 +265,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.setItemAnimator(null);
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
-            float enterDelay = reducedMotion ? 0f : 0.03f;
+            float enterDelay = reducedMotion ? 0f : 0.075f;
             grid.setLayoutAnimation(new LayoutAnimationController(
                     AnimationUtils.loadAnimation(this, enterAnim), enterDelay));
         }
@@ -695,15 +696,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private void moveGlowTo(View item) {
         if (rowGlow == null) return;
-        ViewGroup.LayoutParams lp = rowGlow.getLayoutParams();
         int h = Math.round(item.getHeight() * 1.7f);
+        float targetY = item.getY() + (item.getHeight() - h) / 2f;
+        ViewGroup.LayoutParams lp = rowGlow.getLayoutParams();
         if (lp.height != h) {
             lp.height = h;
             rowGlow.setLayoutParams(lp);
         }
-        rowGlow.setY(item.getY() + (item.getHeight() - h) / 2f);
+        rowGlow.animate().cancel();
+        if (!animations || reducedMotion) {
+            rowGlow.setY(targetY);
+            rowGlow.setAlpha(1f);
+            return;
+        }
+        // The light travels with the selection instead of jumping, and it lags a frame behind the
+        // row, which is what makes it read as something being lit rather than a highlight snapping.
+        rowGlow.animate()
+                .y(targetY)
+                .setDuration(rowGlow.getAlpha() < 0.5f ? 260 : 300)
+                .setInterpolator(new DecelerateInterpolator(1.5f))
+                .start();
         if (rowGlow.getAlpha() < 1f) {
-            rowGlow.animate().alpha(1f).setDuration(animations && !reducedMotion ? 320 : 0).start();
+            rowGlow.animate().alpha(1f).setDuration(340).start();
         }
     }
 
