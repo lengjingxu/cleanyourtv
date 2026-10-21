@@ -1,5 +1,6 @@
 package com.gathin.tvhome;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
@@ -130,6 +131,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private ImageView wallpaperView;
     /** Soft light behind the selected row. */
     private RowGlow rowGlow;
+    /** Marks wallpaper views, so a shift reaches both pictures while one cross-fades over the other. */
+    private static final String WALLPAPER_TAG = "wallpaper";
+    /** The picture is drawn a little larger than the screen, or a shift would expose its edge. */
+    private static final float WALLPAPER_OVERSCALE = 1.09f;
+    /** How far the picture may slide, in dp. Kept inside the overscan above. */
+    private static final float WALLPAPER_SHIFT_DP = 20f;
+    /** Current parallax offset of the picture, in px. */
+    private float wallpaperShift;
+    private ValueAnimator wallpaperSettle;
     private Runnable wallpaperTick;
     private static final long WALLPAPER_MS = 15 * 60_000L;
     /** The grid has been laid out and focused since the last resume; the card prompt waits for this. */
@@ -291,12 +301,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 fadeByDistance();
                 parallaxHeader(dy);
+                parallaxWallpaper(dy);
             }
 
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
                 // The header is a parallax, not a position: it returns home once the list settles.
-                if (newState == RecyclerView.SCROLL_STATE_IDLE) settleHeader();
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    settleHeader();
+                    settleWallpaper();
+                }
             }
         });
 
@@ -412,6 +426,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             ImageView wall = new ImageView(this);
             wall.setScaleType(ImageView.ScaleType.CENTER_CROP);
             wall.setImageBitmap(bmp);
+            wall.setTag(WALLPAPER_TAG);
+            // Overscan, then start wherever the parallax currently sits so a new hour does not jump.
+            wall.setScaleX(WALLPAPER_OVERSCALE);
+            wall.setScaleY(WALLPAPER_OVERSCALE);
+            wall.setTranslationY(wallpaperShift);
             root.addView(wall, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
             // The hour turning over should feel like dusk, not a cut: the old picture stays while the
@@ -429,6 +448,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         } catch (Exception | OutOfMemoryError e) {
             // A bad or huge picture must never take the home screen down; the plain colour stays.
+            android.util.Log.w("TvHomeParallax", "wallpaper failed: " + e);
         }
     }
 
@@ -659,7 +679,46 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * Half a row of padding top and bottom, so the first and last rows can both reach the centre
      * line. Everything else about the window is handled by the fade.
      */
-    /** The light band follows the selection: same height, a little wider, fading in as it arrives. */
+    /**
+     * The picture drifts against the list. It only moves a fraction of the scroll and only so far,
+     * because the photo is cropped to the screen: past the overscan its edge would come into view.
+     */
+    private void parallaxWallpaper(int dy) {
+        if (wallpaperView == null || dy == 0) return;
+        if (!animations || reducedMotion) return;
+        if (wallpaperSettle != null) wallpaperSettle.cancel();
+        float max = WALLPAPER_SHIFT_DP * density;
+        wallpaperShift = Math.max(-max, Math.min(max, wallpaperShift - dy * 0.055f));
+        applyWallpaperShift();
+    }
+
+    /** Points every wallpaper view at the same offset, so a cross-fade stays aligned with the list. */
+    private void applyWallpaperShift() {
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View v = root.getChildAt(i);
+            if (WALLPAPER_TAG.equals(v.getTag())) v.setTranslationY(wallpaperShift);
+        }
+    }
+
+    /** After the list stops the picture eases back to centre, so Home always rests on the same frame. */
+    private void settleWallpaper() {
+        if (wallpaperView == null || wallpaperShift == 0f) return;
+        if (!animations || reducedMotion) {
+            wallpaperShift = 0f;
+            applyWallpaperShift();
+            return;
+        }
+        if (wallpaperSettle != null) wallpaperSettle.cancel();
+        wallpaperSettle = ValueAnimator.ofFloat(wallpaperShift, 0f);
+        wallpaperSettle.setDuration(560);
+        wallpaperSettle.setInterpolator(new DecelerateInterpolator(1.3f));
+        wallpaperSettle.addUpdateListener(a -> {
+            wallpaperShift = (float) a.getAnimatedValue();
+            applyWallpaperShift();
+        });
+        wallpaperSettle.start();
+    }
+
     /**
      * The header drifts a little against the list, so scrolling reads as depth rather than a
      * sheet of text sliding under a fixed block. Capped at 18dp so the clock never leaves the top.
@@ -759,15 +818,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * clamps at either end.
      */
     private void centerRow(View item) {
-        RecyclerView.LayoutManager lm = grid.getLayoutManager();
-        if (!(lm instanceof LinearLayoutManager)) return;
-        int pos = ((RecyclerView.LayoutParams) item.getLayoutParams()).getViewLayoutPosition();
-        if (pos == RecyclerView.NO_POSITION) return;
-        // Offset 0 parks the row at the top padding, and the padding is half the leftover height,
-        // so the row's centre lands on the window's centre line.
-        int offset = 0;
-        ((LinearLayoutManager) lm).scrollToPositionWithOffset(pos, offset);
-        grid.post(this::fadeByDistance);
+        int rowH = rowHeightPx();
+        int target = grid.getPaddingTop() + (grid.getHeight() - grid.getPaddingTop() - grid.getPaddingBottom() - rowH) / 2;
+        int dy = item.getTop() - target;
+        if (Math.abs(dy) < 1) {
+            grid.post(this::fadeByDistance);
+            return;
+        }
+        // A real scroll, not scrollToPosition: the list has to travel for onScrolled to fire, and
+        // that callback is what drives the fades, the header drift and the picture's parallax.
+        if (!animations || reducedMotion) {
+            grid.scrollBy(0, dy);
+            grid.post(this::fadeByDistance);
+        } else {
+            grid.smoothScrollBy(0, dy);
+        }
     }
 
     // ---- top bar ---------------------------------------------------------------------------------
