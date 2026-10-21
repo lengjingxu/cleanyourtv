@@ -129,6 +129,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private RemoteWallpaper remoteWallpaper;
     /** The wallpaper view on screen, so a new hour can cross-fade over it instead of cutting. */
     private ImageView wallpaperView;
+    /** The look in use: night (the picture) or crease (white paper). */
+    private Theme theme = Theme.NIGHT;
     /** Marks wallpaper views, so a shift reaches both pictures while one cross-fades over the other. */
     private static final String WALLPAPER_TAG = "wallpaper";
     /** The picture is drawn a little larger than the screen, or a shift would expose its edge. */
@@ -137,7 +139,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private static final float WALLPAPER_SHIFT_DP = 20f;
     /** Current parallax offset of the picture, in px. */
     private float wallpaperShift;
-    private ValueAnimator wallpaperSettle;
     private Runnable wallpaperTick;
     private static final long WALLPAPER_MS = 15 * 60_000L;
     /** The grid has been laid out and focused since the last resume; the card prompt waits for this. */
@@ -226,12 +227,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sourcePanelService = cfg.sourcePanelService;
         sourcePanelAction = cfg.sourcePanelAction;
 
+        theme = Theme.of(cfg.theme);
         root = findViewById(R.id.root);
-        root.setBackgroundColor(cfg.backgroundColor);
-        if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
-        if (cfg.wallpaperIndex != null && !cfg.wallpaperIndex.isEmpty()) startRemoteWallpaper(cfg.wallpaperIndex);
+        root.setBackgroundColor(theme.paper);
+        if (theme.showPicture) {
+            if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
+            if (cfg.wallpaperIndex != null && !cfg.wallpaperIndex.isEmpty()) startRemoteWallpaper(cfg.wallpaperIndex);
+        }
         sky = findViewById(R.id.sky);
-        sky.setIntensity(cfg.skyIntensity);
+        // A paper theme has no sky behind it: the backdrop belongs to the picture.
+        sky.setIntensity(theme.showPicture ? cfg.skyIntensity : 0);
         greeting = findViewById(R.id.greeting);
         greetingColor = greeting.getCurrentTextColor();
         btnWifi = findViewById(R.id.btnWifi);
@@ -243,6 +248,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             date.setTextSize(11f);
             date.setPadding(0, (int) (4 * density), 0, 0);
         }
+        applyTheme();
         vpnApp = cfg.vpnApp;
         moduleCards = cfg.moduleCards;
         hiddenApps = new HashSet<>(cfg.hiddenApps);
@@ -288,17 +294,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 fadeByDistance();
                 parallaxHeader(dy);
-                parallaxWallpaper(dy);
+                updateWallpaperShift();
             }
 
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
-                // The header is a parallax, not a position: it returns home once the list settles.
-                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
-                    settleHeader();
-                    settleWallpaper();
-                }
-            }
         });
 
         btnInputs = findViewById(R.id.btnInputs);
@@ -663,19 +661,56 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
+     * Paints the chrome for the current theme. The list itself is coloured by AppAdapter, which
+     * reads the same Theme, so the two never disagree.
+     */
+    private void applyTheme() {
+        if (theme == Theme.NIGHT) return;   // night is what the XML already says
+
+        int ink = theme.ink;
+        int muted = theme.muted;
+        for (int id : new int[]{R.id.greeting, R.id.clock, R.id.ampm, R.id.date, R.id.shamsiDate}) {
+            TextView v = findViewById(id);
+            if (v != null) v.setTextColor(id == R.id.clock || id == R.id.shamsiDate ? ink : muted);
+        }
+        greetingColor = muted;
+
+        // The pills become ink on paper inside a hairline, rather than frosted glass.
+        for (int id : new int[]{R.id.btnInputs, R.id.btnWifi, R.id.btnSettings}) {
+            TextView pill = findViewById(id);
+            if (pill == null) continue;
+            pill.setTextColor(ink);
+            pill.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(ink));
+            android.graphics.drawable.GradientDrawable outline = new android.graphics.drawable.GradientDrawable();
+            outline.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            outline.setColor(0x00000000);
+            outline.setStroke(Math.max(1, Math.round(density)), theme.hairline);
+            outline.setCornerRadius(21 * density);
+            pill.setBackground(outline);
+        }
+        // The divider between the clock and the date.
+        View divider = findViewById(R.id.headerDivider);
+        if (divider != null) divider.setBackgroundColor(theme.hairline);
+    }
+
+    /**
      * Half a row of padding top and bottom, so the first and last rows can both reach the centre
      * line. Everything else about the window is handled by the fade.
      */
     /**
-     * The picture drifts against the list. It only moves a fraction of the scroll and only so far,
-     * because the photo is cropped to the screen: past the overscan its edge would come into view.
+     * The picture drifts against the list: its offset is a function of how far the list has
+     * scrolled, not an accumulator that has to be unwound. Scrolling down slides it up and leaving
+     * it there is the point — a pan, not a bounce. Scrolling back returns it by the same amount.
      */
-    private void parallaxWallpaper(int dy) {
-        if (wallpaperView == null || dy == 0) return;
+    private void updateWallpaperShift() {
+        if (wallpaperView == null) return;
         if (!animations || reducedMotion) return;
-        if (wallpaperSettle != null) wallpaperSettle.cancel();
         float max = WALLPAPER_SHIFT_DP * density;
-        wallpaperShift = Math.max(-max, Math.min(max, wallpaperShift - dy * 0.055f));
+        // 6% of the scroll distance, so the picture lags the text by a visible but calm margin.
+        float wanted = -grid.computeVerticalScrollOffset() * 0.06f;
+        float next = Math.max(-max, Math.min(max, wanted));
+        if (Math.abs(next - wallpaperShift) < 0.5f) return;
+        wallpaperShift = next;
         applyWallpaperShift();
     }
 
@@ -687,51 +722,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** After the list stops the picture eases back to centre, so Home always rests on the same frame. */
-    private void settleWallpaper() {
-        if (wallpaperView == null || wallpaperShift == 0f) return;
-        if (!animations || reducedMotion) {
-            wallpaperShift = 0f;
-            applyWallpaperShift();
-            return;
-        }
-        if (wallpaperSettle != null) wallpaperSettle.cancel();
-        wallpaperSettle = ValueAnimator.ofFloat(wallpaperShift, 0f);
-        wallpaperSettle.setDuration(560);
-        wallpaperSettle.setInterpolator(new DecelerateInterpolator(1.3f));
-        wallpaperSettle.addUpdateListener(a -> {
-            wallpaperShift = (float) a.getAnimatedValue();
-            applyWallpaperShift();
-        });
-        wallpaperSettle.start();
-    }
-
     /**
-     * The header drifts a little against the list, so scrolling reads as depth rather than a
-     * sheet of text sliding under a fixed block. Capped at 18dp so the clock never leaves the top.
+     * Half a row of padding top and bottom, so the first and last rows can both reach the centre
+     * line. Everything else about the window is handled by the fade.
      */
-    private void parallaxHeader(int dy) {
-        if (!animations || reducedMotion || dy == 0) return;
-        View header = findViewById(R.id.leftBlock);
-        View buttons = findViewById(R.id.topButtons);
-        if (header == null) return;
-        float max = 18 * density;
-        float target = header.getTranslationY() - dy * 0.14f;
-        if (Math.abs(target) > max) target = Math.signum(target) * max;
-        header.setTranslationY(target);
-        if (buttons != null) buttons.setTranslationY(target);
-    }
-
-    /** Back to rest after the list stops, so the clock is never left hanging off its line. */
-    private void settleHeader() {
-        View header = findViewById(R.id.leftBlock);
-        View buttons = findViewById(R.id.topButtons);
-        if (header == null) return;
-        long d = animations && !reducedMotion ? 420 : 0;
-        header.animate().translationY(0f).setDuration(d).start();
-        if (buttons != null) buttons.animate().translationY(0f).setDuration(d).start();
-    }
-
     private void sizeListPadding() {
         int h = grid.getHeight();
         if (h <= 0) return;
@@ -739,6 +733,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (grid.getPaddingTop() != pad) {
             grid.setPadding(grid.getPaddingLeft(), pad, grid.getPaddingRight(), pad);
         }
+    }
+
+    /**
+     * The header drifts a little against the list, so scrolling reads as depth rather than a
+     * sheet of text sliding under a fixed block. Capped at 18dp so the clock never leaves the top.
+     */
+    private void parallaxHeader(int dy) {
+        if (!animations || reducedMotion) return;
+        View header = findViewById(R.id.leftBlock);
+        View buttons = findViewById(R.id.topButtons);
+        if (header == null) return;
+        float max = 18 * density;
+        // Same source as the picture: a function of how far the list has scrolled, so the header
+        // drifts with the list and stays where the scroll left it. Scrolling back brings it home.
+        float wanted = -grid.computeVerticalScrollOffset() * 0.11f;
+        float target = Math.max(-max, Math.min(max, wanted));
+        if (Math.abs(target - header.getTranslationY()) < 0.5f) return;
+        header.setTranslationY(target);
+        if (buttons != null) buttons.setTranslationY(target);
     }
 
     private int rowHeightPx() {

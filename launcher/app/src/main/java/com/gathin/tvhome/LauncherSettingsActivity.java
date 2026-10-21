@@ -13,9 +13,11 @@ import android.widget.Toast;
 /** Remote-friendly settings owned by the launcher; system settings stay one row away. */
 public final class LauncherSettingsActivity extends Activity {
     private SharedPreferences choices;
+    private TextView themeChoice;
     private TextView animationsChoice;
     private TextView advancedChoice;
     private TextView followThemeChoice;
+    private String theme;
     private boolean animations;
     private boolean advancedEffects;
 
@@ -25,9 +27,18 @@ public final class LauncherSettingsActivity extends Activity {
         setContentView(R.layout.activity_launcher_settings);
         choices = getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE);
         Config config = Config.load(this);
+        theme = config.theme;
         animations = config.animations;
         advancedEffects = config.animations && config.advancedEffects;
 
+        themeChoice = findViewById(R.id.themeChoice);
+        themeChoice.setOnClickListener(v -> {
+            // Two looks, one key: tapping flips between the picture and the paper.
+            theme = Theme.CREASE_ID.equals(theme) ? Theme.NIGHT_ID : Theme.CREASE_ID;
+            choices.edit().putString("theme", theme).apply();
+            setResult(RESULT_OK);
+            refresh();
+        });
         animationsChoice = findViewById(R.id.animationsChoice);
         animationsChoice.setOnClickListener(v -> {
             animations = !animations;
@@ -53,7 +64,7 @@ public final class LauncherSettingsActivity extends Activity {
         followThemeChoice = findViewById(R.id.followThemeChoice);
         followThemeChoice.setOnClickListener(v -> {
             if (!hasOnTvChoices()) return;
-            choices.edit().remove("columns").remove("animations").remove("advanced_effects").commit();
+            choices.edit().remove("theme").remove("columns").remove("animations").remove("advanced_effects").commit();
             Config current = Config.load(this);
             animations = current.animations;
             advancedEffects = current.animations && current.advancedEffects;
@@ -78,6 +89,8 @@ public final class LauncherSettingsActivity extends Activity {
     }
 
     private void refresh() {
+        themeChoice.setText(getString(R.string.theme_state,
+                getString(Theme.CREASE_ID.equals(theme) ? R.string.theme_crease : R.string.theme_night)));
         animationsChoice.setText(getString(R.string.animations_state,
                 getString(animations ? R.string.on : R.string.off)));
         advancedChoice.setText(getString(R.string.advanced_effects_state,

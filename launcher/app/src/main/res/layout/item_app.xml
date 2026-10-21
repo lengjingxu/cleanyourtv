@@ -10,6 +10,14 @@
     android:clipChildren="false"
     android:clipToPadding="false">
 
+    <!-- CREASE marks the selection with a red hairline at the gutter, not a wash. -->
+    <View
+        android:id="@+id/marker"
+        android:layout_width="3dp"
+        android:layout_height="@dimen/list_row_height"
+        android:layout_gravity="start|center_vertical"
+        android:alpha="0" />
+
     <com.gathin.tvhome.RowWash
         android:id="@+id/wash"
         android:layout_width="match_parent"

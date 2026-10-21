@@ -22,9 +22,14 @@
             android:textSize="34sp" />
 
         <TextView
-            android:id="@+id/animationsChoice"
+            android:id="@+id/themeChoice"
             style="@style/SettingsRow"
             android:layout_marginTop="28dp" />
+
+        <TextView
+            android:id="@+id/animationsChoice"
+            style="@style/SettingsRow"
+            android:layout_marginTop="10dp" />
 
         <TextView
             android:id="@+id/advancedChoice"

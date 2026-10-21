@@ -66,6 +66,8 @@ final class Config {
     final File wallpaper;
     /** Wall to pull the newest picture from (config.json, wallpaper_index); empty keeps the static picture. */
     final String wallpaperIndex;
+    /** Look of the home screen: Theme.NIGHT or Theme.CREASE. */
+    final String theme;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -76,7 +78,8 @@ final class Config {
                    int columns, int rowsBelowDock, boolean animations, boolean advancedEffects,
                    boolean shamsiDate, boolean moduleCards, boolean reducedMotion, String vpnApp,
                    boolean showHomeSettingsShortcut, int backgroundColor, int skyIntensity,
-                   int[] settingsKeycodes, boolean settingsKeyPanel, File wallpaper, String wallpaperIndex, boolean overlayApplied,
+                   int[] settingsKeycodes, boolean settingsKeyPanel, File wallpaper, String wallpaperIndex,
+                   String theme, boolean overlayApplied,
                    Festival festival) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
@@ -101,6 +104,7 @@ final class Config {
         this.settingsKeyPanel = settingsKeyPanel;
         this.wallpaper = wallpaper;
         this.wallpaperIndex = wallpaperIndex;
+        this.theme = theme;
         this.overlayApplied = overlayApplied;
         this.festival = festival;
     }
@@ -139,6 +143,7 @@ final class Config {
         int[] settingsKeycodes = res.getIntArray(R.array.settings_key_keycodes);
         boolean settingsKeyPanel = res.getBoolean(R.bool.settings_key_panel);
         String wallpaperIndex = "";
+        String theme = res.getString(R.string.home_theme).trim();
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -168,6 +173,7 @@ final class Config {
             settingsKeycodes = intArray(json, "settings_key_keycodes", settingsKeycodes);
             settingsKeyPanel = bool(json, "settings_key_panel", settingsKeyPanel);
             wallpaperIndex = string(json, "wallpaper_index", wallpaperIndex);
+            theme = string(json, "theme", theme);
         }
         // A theme push or reset invalidates choices made on the TV. On first use, remember the
         // current theme without clearing choices from an older launcher version.
@@ -176,6 +182,9 @@ final class Config {
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
         animations = choices.getBoolean("animations", animations);
+        // The look chosen on the TV wins over the theme file, until "Follow theme" clears it.
+        String chosenTheme = choices.getString("theme", null);
+        if (chosenTheme != null) theme = chosenTheme;
         advancedEffects = choices.getBoolean("advanced_effects", advancedEffects);
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
         if (wallpaper != null && !(wallpaper.isFile() && wallpaper.length() > 0)) wallpaper = null;
@@ -188,7 +197,7 @@ final class Config {
         return new Config(dock, fillDock, hidden, liveTv, liveTvAction, panelService, panelAction, inputAction,
                 Math.max(1, columns), Math.max(0, rowsBelow), animations, advancedEffects,
                 shamsi, moduleCards, reducedMotion, vpn, homeSettings, background,
-                Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, wallpaper, wallpaperIndex, applied,
+                Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, wallpaper, wallpaperIndex, theme, applied,
                 festival);
     }
 

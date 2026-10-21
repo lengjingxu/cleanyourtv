@@ -76,10 +76,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
     /** Resting and focused type sizes, in sp. The row is tall enough for the focused size. */
     static final float RESTING_SP = 30f, FOCUSED_SP = 30f;
-    private static final int INK_FOCUS = 0xFFFFFFFF;
-    private static final int INK_REST = 0x52FFFFFF;
-    private static final int INK_INDEX_FOCUS = 0x8AFFFFFF;
-    private static final int INK_INDEX_REST = 0x33FFFFFF;
+    /** The look in use; the list and the chrome read it from the same source. */
+    private final Theme theme;
 
     private final Context ctx;
     private final TileListener listener;
@@ -101,6 +99,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg) {
         this.ctx = ctx;
         this.listener = listener;
+        this.theme = Theme.of(cfg.theme);
         this.dockSize = dockSize;
         this.favourites = cfg.dockApps;
         this.fillDock = cfg.fillDock;
@@ -179,7 +178,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_app, parent, false);
-        return new Holder(v, listener, animations, reducedMotion);
+        return new Holder(v, listener, theme, animations, reducedMotion);
     }
 
     @Override
@@ -205,12 +204,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         // A rebind can land mid-fade; stop the old one before setting the colour outright.
         stopInk(h.index);
         stopInk(h.name);
-        h.index.setTextColor(focused ? INK_INDEX_FOCUS : INK_INDEX_REST);
-        h.name.setTextColor(focused ? INK_FOCUS : INK_REST);
+        h.index.setTextColor(focused ? theme.index : theme.indexRest);
+        h.name.setTextColor(focused ? theme.ink : theme.inkRest);
         h.name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, focused ? FOCUSED_SP : RESTING_SP);
         h.wash.animate().cancel();
-        h.wash.setTint(washTint());
-        h.wash.setAlpha(focused ? 1f : 0f);
+        // CREASE lights nothing: its selection is acrylic plus a red hairline.
+        h.wash.setTint(theme.showMarker ? theme.wash : washTint());
+        h.wash.setAlpha(focused && !theme.showMarker ? 1f : 0f);
+        h.marker.animate().cancel();
+        h.marker.setAlpha(focused && theme.showMarker ? 1f : 0f);
         h.row.setOnClickListener(v -> launch(e));
         h.row.setOnLongClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
@@ -322,19 +324,24 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         final TextView name;
         final TextView meta;
         final RowWash wash;
+        final View marker;
         final boolean animations;
         final boolean reducedMotion;
         final float density;
+        final Theme theme;
         /** Colour fades, kept per view so a fast scroll cancels the previous one instead of racing it. */
         private ValueAnimator nameInk, indexInk;
 
-        Holder(View v, TileListener listener, boolean animations, boolean reducedMotion) {
+        Holder(View v, TileListener listener, Theme theme, boolean animations, boolean reducedMotion) {
             super(v);
             row = v.findViewById(R.id.row);
             wash = v.findViewById(R.id.wash);
+            marker = v.findViewById(R.id.marker);
+            marker.setBackgroundColor(theme.accent);
             index = v.findViewById(R.id.index);
             name = v.findViewById(R.id.name);
             meta = v.findViewById(R.id.meta);
+            this.theme = theme;
             this.animations = animations;
             this.reducedMotion = reducedMotion;
             this.density = v.getResources().getDisplayMetrics().density;
@@ -369,8 +376,12 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 row.animate().cancel();
                 name.animate().cancel();
                 index.animate().cancel();
+                marker.animate().cancel();
+                marker.animate().alpha(focused && theme.showMarker ? 1f : 0f)
+                        .setDuration(!animations || reducedMotion ? 0 : 160)
+                        .start();
                 wash.animate().cancel();
-                wash.animate().alpha(focused ? 1f : 0f)
+                wash.animate().alpha(focused && !theme.showMarker ? 1f : 0f)
                         .setDuration(!animations || reducedMotion ? 0 : (focused ? 240 : 180))
                         .start();
                 // Grow from the left edge: the row is anchored to the gutter, so a long name
@@ -390,8 +401,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                     index.setAlpha(focused ? 1f : 0.45f);
                     index.setTranslationX(focused ? 0f : -6f * density);
                     meta.setAlpha(focused ? 1f : 0f);
-                    ink(index, focused ? INK_INDEX_FOCUS : INK_INDEX_REST, 0, false);
-                    ink(name, focused ? INK_FOCUS : INK_REST, 0, true);
+                    ink(index, focused ? theme.index : theme.indexRest, 0, false);
+                    ink(name, focused ? theme.ink : theme.inkRest, 0, true);
                 } else {
                     // Three cues, slightly out of step, so the eye is led rather than hit: the row
                     // grows, the number steps in, then the name arrives and brightens.
@@ -420,8 +431,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
                     // Ink crossfades instead of switching, and lags the geometry by a beat: colour
                     // arriving after the shape is what makes the change feel like light, not CSS.
-                    ink(index, focused ? INK_INDEX_FOCUS : INK_INDEX_REST, focused ? 90 : 0, false);
-                    ink(name, focused ? INK_FOCUS : INK_REST, focused ? 120 : 0, true);
+                    ink(index, focused ? theme.index : theme.indexRest, focused ? 90 : 0, false);
+                    ink(name, focused ? theme.ink : theme.inkRest, focused ? 120 : 0, true);
                     meta.animate().alpha(focused ? 1f : 0f).setDuration(180)
                             .setStartDelay(focused ? 120 : 0).start();
                 }
