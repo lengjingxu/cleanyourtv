@@ -68,4 +68,8 @@
     <string name="theme_night">Night</string>
     <string name="theme_crease">Paper</string>
 
+    <string name="appearance_title">Appearance</string>
+    <string name="theme_night_hint">The hour\'s picture, white type</string>
+    <string name="theme_crease_hint">The picture under white acrylic, black type, one red line</string>
+
 </resources>

@@ -2,6 +2,7 @@ package com.gathin.tvhome;
 
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -1175,6 +1176,98 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // ---- launcher settings and module cards -------------------------------------------------------
 
     /** Keep a normal Settings click for the TV; the launcher's choices live behind hold OK. */
+    /**
+     * The appearance picker: every theme as a row with a swatch of its own ground, a name and one
+     * line about what it does. Choosing one is immediate — the choice is a preference, so it also
+     * survives the next reboot.
+     */
+    private void showThemePicker() {
+        final String[] ids = {Theme.NIGHT_ID, Theme.CREASE_ID};
+        final String[] names = {getString(R.string.theme_night), getString(R.string.theme_crease)};
+        final String[] hints = {getString(R.string.theme_night_hint), getString(R.string.theme_crease_hint)};
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        int pad = Math.round(18 * density);
+        list.setPadding(pad, Math.round(8 * density), pad, Math.round(14 * density));
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.appearance_title)
+                .create();
+        dialog.setView(list);
+
+        for (int i = 0; i < ids.length; i++) {
+            final String id = ids[i];
+            list.addView(themeRow(Theme.of(id), names[i], hints[i], id.equals(theme.id), () -> {
+                getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE).edit()
+                        .putString("theme", id).apply();
+                dialog.dismiss();
+                recreate();
+            }));
+        }
+        dialog.show();
+    }
+
+    /** One choice: a swatch of the theme's ground, its name, a line about it, and a tick if chosen. */
+    private View themeRow(Theme t, String name, String hint, boolean selected, Runnable onPick) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        int p = Math.round(14 * density);
+        row.setPadding(p, p, p, p);
+        row.setFocusable(true);
+        row.setClickable(true);
+
+        android.graphics.drawable.GradientDrawable focused = new android.graphics.drawable.GradientDrawable();
+        focused.setColor((theme.ink & 0x00FFFFFF) | 0x1A000000);
+        focused.setCornerRadius(12 * density);
+        android.graphics.drawable.GradientDrawable plain = new android.graphics.drawable.GradientDrawable();
+        plain.setColor(0x00000000);
+        plain.setCornerRadius(12 * density);
+        android.graphics.drawable.StateListDrawable bg = new android.graphics.drawable.StateListDrawable();
+        bg.addState(new int[]{android.R.attr.state_focused}, focused);
+        bg.addState(new int[]{}, plain);
+        row.setBackground(bg);
+
+        // The swatch is the theme in miniature: its paper, a hairline, and its own accent.
+        View swatch = new View(this);
+        android.graphics.drawable.GradientDrawable sw = new android.graphics.drawable.GradientDrawable();
+        sw.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        sw.setColor(t.paper);
+        sw.setStroke(Math.max(1, Math.round(density)), t.showMarker ? t.accent : theme.hairline);
+        sw.setCornerRadius(10 * density);
+        swatch.setBackground(sw);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                Math.round(44 * density), Math.round(44 * density));
+        slp.setMarginEnd(Math.round(16 * density));
+        row.addView(swatch, slp);
+
+        LinearLayout text = new LinearLayout(this);
+        text.setOrientation(LinearLayout.VERTICAL);
+        TextView title = new TextView(this);
+        title.setText(name);
+        title.setTextSize(18);
+        title.setTextColor(theme.ink);
+        TextView sub = new TextView(this);
+        sub.setText(hint);
+        sub.setTextSize(12);
+        sub.setTextColor(theme.muted);
+        text.addView(title);
+        text.addView(sub);
+        row.addView(text, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        if (selected) {
+            TextView tick = new TextView(this);
+            tick.setText("\u2713");
+            tick.setTextSize(20);
+            tick.setTextColor(theme.accent);
+            row.addView(tick);
+        }
+        row.setOnClickListener(v -> onPick.run());
+        return row;
+    }
+
     private void showSettingsMenu() {
         View anchor = findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
@@ -1182,6 +1275,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         PopupWindow popup = glassPopup(panel, (int) (200 * density));
         addSettingsMenuRow(rows, popup, R.string.launcher_settings, () -> startActivityForResult(
                 new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST));
+        addSettingsMenuRow(rows, popup, R.string.appearance_title, this::showThemePicker);
         if (moduleCards) addSettingsMenuRow(rows, popup, R.string.module_cards, this::showModuleCards);
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
