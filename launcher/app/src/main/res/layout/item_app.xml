@@ -7,8 +7,8 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="0dp"
-    android:paddingEnd="0dp">
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
     <LinearLayout
         android:id="@+id/row"
@@ -19,17 +19,17 @@
         android:focusable="true"
         android:clickable="true"
         android:background="@drawable/list_row_bg"
-        android:paddingStart="18dp"
-        android:paddingEnd="26dp">
+        android:paddingStart="@dimen/list_gutter"
+        android:paddingEnd="56dp">
 
         <TextView
             android:id="@+id/index"
-            android:layout_width="34dp"
+            android:layout_width="44dp"
             android:layout_height="wrap_content"
             android:textColor="#33FFFFFF"
-            android:textSize="10sp"
+            android:textSize="@dimen/list_index_size"
             android:fontFamily="@font/outfit_medium"
-            android:letterSpacing="0.2"
+            android:letterSpacing="0.22"
             android:includeFontPadding="false"
             android:importantForAccessibility="no" />
 
@@ -42,7 +42,7 @@
             android:textColor="#52FFFFFF"
             android:textSize="@dimen/list_name_size"
             android:fontFamily="@font/outfit_light"
-            android:letterSpacing="-0.03"
+            android:letterSpacing="-0.025"
             android:includeFontPadding="false" />
 
         <TextView
@@ -50,11 +50,11 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="14dp"
+            android:layout_marginStart="20dp"
             android:maxLines="1"
             android:ellipsize="end"
             android:textColor="#40FFFFFF"
-            android:textSize="10sp"
+            android:textSize="11sp"
             android:fontFamily="@font/outfit_medium"
             android:letterSpacing="0.18"
             android:textAllCaps="true"

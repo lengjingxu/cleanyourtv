@@ -18,6 +18,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -72,7 +73,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     }
 
     /** Resting and focused type sizes, in sp. The row is tall enough for the focused size. */
-    static final float RESTING_SP = 22f, FOCUSED_SP = 32f;
+    static final float RESTING_SP = 30f, FOCUSED_SP = 30f;
     private static final int INK_FOCUS = 0xFFFFFFFF;
     private static final int INK_REST = 0x52FFFFFF;
     private static final int INK_INDEX_FOCUS = 0x8AFFFFFF;
@@ -280,6 +281,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         final TextView meta;
         final boolean animations;
         final boolean reducedMotion;
+        final float density;
 
         Holder(View v, TileListener listener, boolean animations, boolean reducedMotion) {
             super(v);
@@ -289,6 +291,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             meta = v.findViewById(R.id.meta);
             this.animations = animations;
             this.reducedMotion = reducedMotion;
+            this.density = v.getResources().getDisplayMetrics().density;
 
             row.setOnKeyListener((view, keyCode, event) -> {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
@@ -300,21 +303,43 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
             row.setOnFocusChangeListener((view, focused) -> {
                 int pos = getBindingAdapterPosition();
-                Holder h = this;
                 index.setTextColor(focused ? INK_INDEX_FOCUS : INK_INDEX_REST);
                 name.setTextColor(focused ? INK_FOCUS : INK_REST);
+
+                // Dock-style growth: the whole row lifts and scales a little, and the name grows
+                // more than the row does, so the selected line reads bigger without the list moving.
+                float rowScale = focused ? 1.045f : 1f;
+                float nameScale = focused ? 1.20f : 1f;
+                float lift = focused ? -2f * density : 0f;
+
+                row.animate().cancel();
                 name.animate().cancel();
-                name.setScaleX(1f);
-                name.setScaleY(1f);
-                // Type size, not a scale: 34sp to 46sp reads as the same letterform growing, and it
-                // re-lays out at the new size instead of magnifying a raster of the old one.
-                name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, focused ? FOCUSED_SP : RESTING_SP);
-                name.setTextColor(focused ? INK_FOCUS : INK_REST);
-                index.setTextColor(focused ? INK_INDEX_FOCUS : INK_INDEX_REST);
+                index.animate().cancel();
+
                 if (!animations || reducedMotion) {
-                    view.animate().cancel();
+                    row.setScaleX(rowScale);
+                    row.setScaleY(rowScale);
+                    row.setTranslationY(lift);
+                    name.setScaleX(nameScale);
+                    name.setScaleY(nameScale);
+                    index.setAlpha(focused ? 1f : 0.55f);
                     meta.setAlpha(focused ? 1f : 0f);
                 } else {
+                    // Overshoot on the way in, settle on the way out: the bounce is what makes it
+                    // feel like a dock rather than a layout change.
+                    row.animate().scaleX(rowScale).scaleY(rowScale).translationY(lift)
+                            .setDuration(focused ? 260 : 200)
+                            .setInterpolator(focused
+                                    ? new OvershootInterpolator(1.15f)
+                                    : new DecelerateInterpolator(1.6f))
+                            .withLayer().start();
+                    name.animate().scaleX(nameScale).scaleY(nameScale)
+                            .setDuration(focused ? 300 : 210)
+                            .setInterpolator(focused
+                                    ? new OvershootInterpolator(1.6f)
+                                    : new DecelerateInterpolator(1.6f))
+                            .withLayer().start();
+                    index.animate().alpha(focused ? 1f : 0.55f).setDuration(200).start();
                     meta.animate().alpha(focused ? 1f : 0f).setDuration(160).start();
                 }
                 if (focused && listener != null && pos != RecyclerView.NO_POSITION) {
