@@ -129,8 +129,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private RemoteWallpaper remoteWallpaper;
     /** The wallpaper view on screen, so a new hour can cross-fade over it instead of cutting. */
     private ImageView wallpaperView;
-    /** Soft light behind the selected row. */
-    private RowGlow rowGlow;
     /** Marks wallpaper views, so a shift reaches both pictures while one cross-fades over the other. */
     private static final String WALLPAPER_TAG = "wallpaper";
     /** The picture is drawn a little larger than the screen, or a shift would expose its edge. */
@@ -282,18 +280,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
         grid.setAdapter(adapter);
 
-        // A soft band of light behind the selected row, added under the list so the text sits on it.
-        rowGlow = new RowGlow(this);
-        rowGlow.setTint(glowTint());
-        rowGlow.setAlpha(0f);
-        ViewGroup listParent = (ViewGroup) grid.getParent();
-        listParent.addView(rowGlow, 0, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0));
-
-        // The menu is a window of a fixed number of rows, centred in the space under the header.
-        // The focused row stays on the centre line while the list scrolls beneath it.
-        // Rows fade with distance from the centre line. This is real transparency, not a black
-        // mask over the wallpaper: a photo behind the list keeps its colour all the way out.
+        // Half a row of padding top and bottom, so the first and last rows can reach the centre line.
         grid.addOnLayoutChangeListener((v, l, t2, r, b, ol, ot, or, ob) -> sizeListPadding());
 
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -745,41 +732,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (buttons != null) buttons.animate().translationY(0f).setDuration(d).start();
     }
 
-    /** Warm light in the evening, cooler through the day: the glow belongs to the hour. */
-    private int glowTint() {
-        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        if (hour >= 18 || hour < 6) return 0xFFFFD9A0;   // evening: lamplight
-        if (hour < 10) return 0xFFFFE8C8;                // morning: low sun
-        return 0xFFD8E6FF;                               // midday: daylight
-    }
-
-    private void moveGlowTo(View item) {
-        if (rowGlow == null) return;
-        int h = Math.round(item.getHeight() * 1.7f);
-        float targetY = item.getY() + (item.getHeight() - h) / 2f;
-        ViewGroup.LayoutParams lp = rowGlow.getLayoutParams();
-        if (lp.height != h) {
-            lp.height = h;
-            rowGlow.setLayoutParams(lp);
-        }
-        rowGlow.animate().cancel();
-        if (!animations || reducedMotion) {
-            rowGlow.setY(targetY);
-            rowGlow.setAlpha(1f);
-            return;
-        }
-        // The light travels with the selection instead of jumping, and it lags a frame behind the
-        // row, which is what makes it read as something being lit rather than a highlight snapping.
-        rowGlow.animate()
-                .y(targetY)
-                .setDuration(rowGlow.getAlpha() < 0.5f ? 260 : 300)
-                .setInterpolator(new DecelerateInterpolator(1.5f))
-                .start();
-        if (rowGlow.getAlpha() < 1f) {
-            rowGlow.animate().alpha(1f).setDuration(340).start();
-        }
-    }
-
     private void sizeListPadding() {
         int h = grid.getHeight();
         if (h <= 0) return;
@@ -809,7 +761,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The focused row must sit on the window's centre line, not merely be visible: the list
         // scrolls under a fixed selection, the way a picker does.
         centerRow(item);
-        moveGlowTo(item);
     }
 
     /**

@@ -10,6 +10,12 @@
     android:clipChildren="false"
     android:clipToPadding="false">
 
+    <com.gathin.tvhome.RowWash
+        android:id="@+id/wash"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/list_row_height"
+        android:alpha="0" />
+
     <LinearLayout
         android:id="@+id/row"
         android:layout_width="match_parent"
@@ -18,7 +24,7 @@
         android:gravity="center_vertical"
         android:focusable="true"
         android:clickable="true"
-        android:background="@drawable/list_row_bg"
+        android:defaultFocusHighlightEnabled="false"
         android:paddingStart="@dimen/list_gutter"
         android:paddingEnd="56dp">
 

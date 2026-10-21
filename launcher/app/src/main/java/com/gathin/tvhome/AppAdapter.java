@@ -208,6 +208,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         h.index.setTextColor(focused ? INK_INDEX_FOCUS : INK_INDEX_REST);
         h.name.setTextColor(focused ? INK_FOCUS : INK_REST);
         h.name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, focused ? FOCUSED_SP : RESTING_SP);
+        h.wash.animate().cancel();
+        h.wash.setTint(washTint());
+        h.wash.setAlpha(focused ? 1f : 0f);
         h.row.setOnClickListener(v -> launch(e));
         h.row.setOnLongClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
@@ -305,11 +308,20 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         view.setTag(view.getId(), a);
     }
 
+    /** Warm after dark, cooler through the day: the selection belongs to the hour. */
+    private static int washTint() {
+        int hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+        if (hour >= 18 || hour < 6) return 0xFFFFD9A0;   // evening: lamplight
+        if (hour < 10) return 0xFFFFE8C8;                // morning: low sun
+        return 0xFFDCE8FF;                               // midday: daylight
+    }
+
     static final class Holder extends RecyclerView.ViewHolder {
         final View row;
         final TextView index;
         final TextView name;
         final TextView meta;
+        final RowWash wash;
         final boolean animations;
         final boolean reducedMotion;
         final float density;
@@ -319,6 +331,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         Holder(View v, TileListener listener, boolean animations, boolean reducedMotion) {
             super(v);
             row = v.findViewById(R.id.row);
+            wash = v.findViewById(R.id.wash);
             index = v.findViewById(R.id.index);
             name = v.findViewById(R.id.name);
             meta = v.findViewById(R.id.meta);
@@ -356,6 +369,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 row.animate().cancel();
                 name.animate().cancel();
                 index.animate().cancel();
+                wash.animate().cancel();
+                wash.animate().alpha(focused ? 1f : 0f)
+                        .setDuration(!animations || reducedMotion ? 0 : (focused ? 240 : 180))
+                        .start();
                 // Grow from the left edge: the row is anchored to the gutter, so a long name
                 // expands into free space instead of pushing out of the screen on both sides.
                 row.setPivotX(0f);
@@ -369,6 +386,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                     row.setScaleY(focused ? 1.5f : 1f);
                     name.setScaleX(focused ? 1.5f : 1f);
                     name.setScaleY(focused ? 1.5f : 1f);
+                    wash.setAlpha(focused ? 1f : 0f);
                     index.setAlpha(focused ? 1f : 0.45f);
                     index.setTranslationX(focused ? 0f : -6f * density);
                     meta.setAlpha(focused ? 1f : 0f);
