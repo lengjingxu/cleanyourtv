@@ -329,7 +329,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                     row.setTranslationY(lift);
                     name.setScaleX(nameScale);
                     name.setScaleY(nameScale);
-                    index.setAlpha(focused ? 1f : 0.55f);
+                    index.setAlpha(focused ? 1f : 0.45f);
+                    index.setTranslationX(focused ? 0f : -6f * density);
                     meta.setAlpha(focused ? 1f : 0f);
                 } else {
                     // Overshoot on the way in, settle on the way out: the bounce is what makes it
@@ -346,7 +347,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                                     ? new OvershootInterpolator(1.6f)
                                     : new DecelerateInterpolator(1.6f))
                             .withLayer().start();
-                    index.animate().alpha(focused ? 1f : 0.55f).setDuration(200).start();
+                    // The number steps in from the gutter, so the eye lands on it before the name.
+                    index.animate()
+                            .alpha(focused ? 1f : 0.45f)
+                            .translationX(focused ? 0f : -6f * density)
+                            .setDuration(focused ? 260 : 180)
+                            .setInterpolator(focused
+                                    ? new DecelerateInterpolator(1.4f)
+                                    : new DecelerateInterpolator(1.6f))
+                            .start();
                     meta.animate().alpha(focused ? 1f : 0f).setDuration(160).start();
                 }
                 if (focused && listener != null && pos != RecyclerView.NO_POSITION) {

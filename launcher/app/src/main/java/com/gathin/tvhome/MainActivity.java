@@ -125,6 +125,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private List<Cards.Card> cards = Collections.emptyList();
     /** Picture pulled from the wall (config.json, wallpaper_url); refreshed while Home is up. */
     private RemoteWallpaper remoteWallpaper;
+    /** The wallpaper view on screen, so a new hour can cross-fade over it instead of cutting. */
+    private ImageView wallpaperView;
+    /** Soft light behind the selected row. */
+    private RowGlow rowGlow;
     private Runnable wallpaperTick;
     private static final long WALLPAPER_MS = 15 * 60_000L;
     /** The grid has been laid out and focused since the last resume; the card prompt waits for this. */
@@ -267,6 +271,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
         grid.setAdapter(adapter);
 
+        // A soft band of light behind the selected row, added under the list so the text sits on it.
+        rowGlow = new RowGlow(this);
+        rowGlow.setTint(glowTint());
+        rowGlow.setAlpha(0f);
+        ViewGroup listParent = (ViewGroup) grid.getParent();
+        listParent.addView(rowGlow, 0, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0));
+
         // The menu is a window of a fixed number of rows, centred in the space under the header.
         // The focused row stays on the centre line while the list scrolls beneath it.
         // Rows fade with distance from the centre line. This is real transparency, not a black
@@ -277,6 +289,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 fadeByDistance();
+                parallaxHeader(dy);
+            }
+
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
+                // The header is a parallax, not a position: it returns home once the list settles.
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) settleHeader();
             }
         });
 
@@ -389,10 +408,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             opts.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565;   // no alpha needed, half the memory
             android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
             if (bmp == null) return;
-            android.widget.ImageView wall = new android.widget.ImageView(this);
-            wall.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+            ImageView wall = new ImageView(this);
+            wall.setScaleType(ImageView.ScaleType.CENTER_CROP);
             wall.setImageBitmap(bmp);
             root.addView(wall, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            // The hour turning over should feel like dusk, not a cut: the old picture stays while the
+            // new one fades in over it, then the old view is dropped so only one bitmap is kept.
+            final ImageView previous = wallpaperView;
+            wallpaperView = wall;
+            if (previous != null && previous != wall) {
+                if (!animations || reducedMotion) {
+                    root.removeView(previous);
+                } else {
+                    wall.setAlpha(0f);
+                    wall.animate().alpha(1f).setDuration(1100)
+                            .withEndAction(() -> root.removeView(previous)).start();
+                }
+            }
         } catch (Exception | OutOfMemoryError e) {
             // A bad or huge picture must never take the home screen down; the plain colour stays.
         }
@@ -625,6 +658,55 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * Half a row of padding top and bottom, so the first and last rows can both reach the centre
      * line. Everything else about the window is handled by the fade.
      */
+    /** The light band follows the selection: same height, a little wider, fading in as it arrives. */
+    /**
+     * The header drifts a little against the list, so scrolling reads as depth rather than a
+     * sheet of text sliding under a fixed block. Capped at 18dp so the clock never leaves the top.
+     */
+    private void parallaxHeader(int dy) {
+        if (!animations || reducedMotion || dy == 0) return;
+        View header = findViewById(R.id.leftBlock);
+        View buttons = findViewById(R.id.topButtons);
+        if (header == null) return;
+        float max = 18 * density;
+        float target = header.getTranslationY() - dy * 0.14f;
+        if (Math.abs(target) > max) target = Math.signum(target) * max;
+        header.setTranslationY(target);
+        if (buttons != null) buttons.setTranslationY(target);
+    }
+
+    /** Back to rest after the list stops, so the clock is never left hanging off its line. */
+    private void settleHeader() {
+        View header = findViewById(R.id.leftBlock);
+        View buttons = findViewById(R.id.topButtons);
+        if (header == null) return;
+        long d = animations && !reducedMotion ? 420 : 0;
+        header.animate().translationY(0f).setDuration(d).start();
+        if (buttons != null) buttons.animate().translationY(0f).setDuration(d).start();
+    }
+
+    /** Warm light in the evening, cooler through the day: the glow belongs to the hour. */
+    private int glowTint() {
+        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        if (hour >= 18 || hour < 6) return 0xFFFFD9A0;   // evening: lamplight
+        if (hour < 10) return 0xFFFFE8C8;                // morning: low sun
+        return 0xFFD8E6FF;                               // midday: daylight
+    }
+
+    private void moveGlowTo(View item) {
+        if (rowGlow == null) return;
+        ViewGroup.LayoutParams lp = rowGlow.getLayoutParams();
+        int h = Math.round(item.getHeight() * 1.7f);
+        if (lp.height != h) {
+            lp.height = h;
+            rowGlow.setLayoutParams(lp);
+        }
+        rowGlow.setY(item.getY() + (item.getHeight() - h) / 2f);
+        if (rowGlow.getAlpha() < 1f) {
+            rowGlow.animate().alpha(1f).setDuration(animations && !reducedMotion ? 320 : 0).start();
+        }
+    }
+
     private void sizeListPadding() {
         int h = grid.getHeight();
         if (h <= 0) return;
@@ -654,6 +736,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The focused row must sit on the window's centre line, not merely be visible: the list
         // scrolls under a fixed selection, the way a picker does.
         centerRow(item);
+        moveGlowTo(item);
     }
 
     /**
