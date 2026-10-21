@@ -308,13 +308,20 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
                 // Dock-style growth: the whole row lifts and scales a little, and the name grows
                 // more than the row does, so the selected line reads bigger without the list moving.
-                float rowScale = focused ? 1.045f : 1f;
-                float nameScale = focused ? 1.20f : 1f;
-                float lift = focused ? -2f * density : 0f;
+                float rowScale = focused ? 1.5f : 1f;
+                float nameScale = focused ? 1.5f : 1f;
+                float lift = 0f;
 
                 row.animate().cancel();
                 name.animate().cancel();
                 index.animate().cancel();
+                // Grow from the left edge: the row is anchored to the gutter, so a long name
+                // expands into free space instead of pushing out of the screen on both sides.
+                row.setPivotX(0f);
+                row.setPivotY(row.getHeight() / 2f);
+                name.setPivotX(0f);
+                name.setPivotY(name.getHeight() / 2f);
+                index.setPivotX(0f);
 
                 if (!animations || reducedMotion) {
                     row.setScaleX(rowScale);

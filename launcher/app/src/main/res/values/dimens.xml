@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- One row is tall enough for the focused type, so the list never moves when focus changes.
-         62dp at 240dpi keeps six rows to roughly half of a 1080p screen: the wallpaper stays the
-         picture, the list stays a caption under it. -->
-    <dimen name="list_row_height">62dp</dimen>
+    <!-- One row is tall enough for the focused type (30sp at 1.5x), so the list never reflows. -->
+    <dimen name="list_row_height">72dp</dimen>
     <dimen name="list_name_size">30sp</dimen>
     <dimen name="list_index_size">11sp</dimen>
     <dimen name="list_gutter">30dp</dimen>
+    <!-- The window shows the focused row, two full rows each side, and a half at each edge that
+         fades out. Six rows total: 2.5 above and 2.5 below the selection. -->
+    <integer name="list_visible_rows">6</integer>
+    <!-- Six rows of 72dp: the window itself, so the layout does not depend on code timing. -->
+    <dimen name="list_window_height">432dp</dimen>
 </resources>

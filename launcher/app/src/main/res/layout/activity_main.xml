@@ -170,19 +170,27 @@
             </LinearLayout>
         </RelativeLayout>
 
-        <!-- The list sits at the bottom of the screen and scrolls up past the header. -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/grid"
+        <!--
+          The menu is a fixed window, centred under the header: the focused row stays on the centre
+          line while the list scrolls under it. Six rows tall, so two full rows and a half show on
+          each side of the selection.
+        -->
+        <FrameLayout
+            android:id="@+id/listWindow"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="10dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="26dp"
-            android:clipToPadding="false"
-            android:clipChildren="false"
-            android:overScrollMode="never"
-            android:scrollbars="none"
-            android:descendantFocusability="afterDescendants" />
+            android:clipChildren="true">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/grid"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:clipChildren="false"
+                android:overScrollMode="never"
+                android:scrollbars="none"
+                android:descendantFocusability="afterDescendants" />
+        </FrameLayout>
     </LinearLayout>
 </FrameLayout>

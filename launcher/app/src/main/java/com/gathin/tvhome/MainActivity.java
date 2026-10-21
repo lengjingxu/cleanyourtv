@@ -255,14 +255,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
         grid.setAdapter(adapter);
 
-        // The list sits at the bottom of the screen, like a caption block under a photograph: the
-        // header keeps the top, the wallpaper shows through the middle.
-        grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int h = b - t;
-            int rows = Math.min(adapter.getItemCount(), MAX_VISIBLE_ROWS);
-            int want = Math.max(0, h - rows * rowHeightPx());
-            if (grid.getPaddingTop() != want) {
-                grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
+        // The menu is a window of a fixed number of rows, centred in the space under the header.
+        // The focused row stays on the centre line while the list scrolls beneath it.
+        // Rows fade with distance from the centre line. This is real transparency, not a black
+        // mask over the wallpaper: a photo behind the list keeps its colour all the way out.
+        grid.addOnLayoutChangeListener((v, l, t2, r, b, ol, ot, or, ob) -> sizeListPadding());
+
+        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                fadeByDistance();
             }
         });
 
@@ -542,26 +544,26 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Home screen: Back goes nowhere.
     }
 
-    private int rowHeightPx() {
-        return getResources().getDimensionPixelSize(R.dimen.list_row_height);
-    }
-
-    // ---- the list ---------------------------------------------------------------------------------
-
     /**
-     * Focus moved to a row. The row carries its own ink and type size, so there is no panel to move:
-     * the list only remembers where focus is and makes sure the row is not cut off at either edge.
+     * The list has no hard edge: a row's ink thins as it moves away from the centre line and is
+     * gone by two and a half rows out, so the menu dissolves into the picture instead of being cut
+     * off. This is real alpha, not a black mask: a photo behind the list keeps its colour.
      */
-    @Override
-    public void onTileFocused(int position, View row) {
-        lastFocused = position;
-        lastFocusedKey = adapter.keyAt(position);
-        if (row == null) return;
-        View item = (View) row.getParent();
-        if (item == null) return;
-        // The focused type is drawn larger than the row box; keep the whole line on screen.
-        Rect want = new Rect(0, -(int) (4 * density), item.getWidth(), item.getHeight() + (int) (4 * density));
-        grid.requestChildRectangleOnScreen(item, want, reducedMotion);
+    private void fadeByDistance() {
+        int h = grid.getHeight();
+        if (h <= 0) return;
+        float centre = h / 2f;
+        float rowH = rowHeightPx();
+        float reach = 2.5f * rowH;          // two and a half rows above and below the selection
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            View child = grid.getChildAt(i);
+            float cy = (child.getTop() + child.getBottom()) / 2f;
+            float d = Math.abs(cy - centre);
+            // Two full rows each side stay at full strength; the half-row beyond them dissolves.
+            float hold = 2f * rowH;
+            float alpha = d <= hold ? 1f : 1f - (d - hold) / Math.max(1f, reach - hold);
+            child.setAlpha(Math.max(0f, Math.min(1f, alpha)));
+        }
     }
 
     // ---- navigation ------------------------------------------------------------------------------
@@ -600,25 +602,63 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return;
         }
         // Not laid out yet: scroll there, then focus once the scroll settles.
-        if (!animations) {
-            grid.scrollToPosition(pos);
-            grid.post(() -> {
-                RecyclerView.ViewHolder h = grid.findViewHolderForAdapterPosition(pos);
-                if (h != null) h.itemView.findViewById(R.id.row).requestFocus();
-            });
-            return;
-        }
-        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
-                if (newState != RecyclerView.SCROLL_STATE_IDLE) return;
-                rv.removeOnScrollListener(this);
-                RecyclerView.ViewHolder h = rv.findViewHolderForAdapterPosition(pos);
-                View target = h != null ? h.itemView.findViewById(R.id.row) : rv.getChildAt(0);
-                if (target != null) target.requestFocus();
-            }
+        grid.scrollToPosition(pos);
+        grid.post(() -> {
+            RecyclerView.ViewHolder h = grid.findViewHolderForAdapterPosition(pos);
+            if (h != null) h.itemView.findViewById(R.id.row).requestFocus();
         });
-        grid.smoothScrollToPosition(pos);
+    }
+
+    /**
+     * Half a row of padding top and bottom, so the first and last rows can both reach the centre
+     * line. Everything else about the window is handled by the fade.
+     */
+    private void sizeListPadding() {
+        int h = grid.getHeight();
+        if (h <= 0) return;
+        int pad = Math.max(0, (h - rowHeightPx()) / 2);
+        if (grid.getPaddingTop() != pad) {
+            grid.setPadding(grid.getPaddingLeft(), pad, grid.getPaddingRight(), pad);
+        }
+    }
+
+    private int rowHeightPx() {
+        return getResources().getDimensionPixelSize(R.dimen.list_row_height);
+    }
+
+    // ---- the list ---------------------------------------------------------------------------------
+
+    /**
+     * Focus moved to a row. The row carries its own ink and type size, so there is no panel to move:
+     * the list only remembers where focus is and makes sure the row is not cut off at either edge.
+     */
+    @Override
+    public void onTileFocused(int position, View row) {
+        lastFocused = position;
+        lastFocusedKey = adapter.keyAt(position);
+        if (row == null) return;
+        View item = (View) row.getParent();
+        if (item == null) return;
+        // The focused row must sit on the window's centre line, not merely be visible: the list
+        // scrolls under a fixed selection, the way a picker does.
+        centerRow(item);
+    }
+
+    /**
+     * Puts this row on the window's centre line. Uses the layout manager's explicit offset instead
+     * of a relative scroll, so the result does not drift when rows are re-measured or the list
+     * clamps at either end.
+     */
+    private void centerRow(View item) {
+        RecyclerView.LayoutManager lm = grid.getLayoutManager();
+        if (!(lm instanceof LinearLayoutManager)) return;
+        int pos = ((RecyclerView.LayoutParams) item.getLayoutParams()).getViewLayoutPosition();
+        if (pos == RecyclerView.NO_POSITION) return;
+        // Offset 0 parks the row at the top padding, and the padding is half the leftover height,
+        // so the row's centre lands on the window's centre line.
+        int offset = 0;
+        ((LinearLayoutManager) lm).scrollToPositionWithOffset(pos, offset);
+        grid.post(this::fadeByDistance);
     }
 
     // ---- top bar ---------------------------------------------------------------------------------
