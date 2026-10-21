@@ -230,13 +230,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         theme = Theme.of(cfg.theme);
         root = findViewById(R.id.root);
         root.setBackgroundColor(theme.paper);
-        if (theme.showPicture) {
-            if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
-            if (cfg.wallpaperIndex != null && !cfg.wallpaperIndex.isEmpty()) startRemoteWallpaper(cfg.wallpaperIndex);
-        }
+        // The photograph runs in both looks: CREASE keeps it, under a sheet of white acrylic.
+        if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
+        if (cfg.wallpaperIndex != null && !cfg.wallpaperIndex.isEmpty()) startRemoteWallpaper(cfg.wallpaperIndex);
+        View veil = findViewById(R.id.veil);
+        if (veil != null) veil.setAlpha(theme.veil / 255f);
         sky = findViewById(R.id.sky);
-        // A paper theme has no sky behind it: the backdrop belongs to the picture.
-        sky.setIntensity(theme.showPicture ? cfg.skyIntensity : 0);
+        // The time-of-day sky belongs to the bare picture; under acrylic it would only mud it.
+        sky.setIntensity(theme.veil == 0 ? cfg.skyIntensity : 0);
         greeting = findViewById(R.id.greeting);
         greetingColor = greeting.getCurrentTextColor();
         btnWifi = findViewById(R.id.btnWifi);

@@ -12,6 +12,15 @@
         android:layout_height="match_parent"
         android:importantForAccessibility="no" />
 
+    <!-- CREASE holds the picture back under white acrylic; night leaves this clear. -->
+    <View
+        android:id="@+id/veil"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FFFFFFFF"
+        android:alpha="0"
+        android:importantForAccessibility="no" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"

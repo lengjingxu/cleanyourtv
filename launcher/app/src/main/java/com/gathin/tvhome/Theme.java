@@ -27,7 +27,7 @@ final class Theme {
             /* wash */     0xFFFFFFFF,   // tint of the selection wash
             /* accent */   0xFFFFFFFF,   // marker: none in this theme, hidden per showMarker
             /* showMarker*/false,
-            /* showPicture*/true);
+            /* veil */      0);
 
     static final Theme CREASE = new Theme(
             CREASE_ID,
@@ -42,7 +42,7 @@ final class Theme {
             /* wash */     0xFFF2F2F2,   // the selection is acrylic, not light
             /* accent */   0xFFD31218,   // the one red in the room
             /* showMarker*/true,
-            /* showPicture*/false);
+            /* veil */      176);   // white acrylic: the picture is still read, held back
 
     final String id;
     final int paper;
@@ -57,11 +57,11 @@ final class Theme {
     final int accent;
     /** CREASE marks the selection with a red hairline; NIGHT lights it instead. */
     final boolean showMarker;
-    /** CREASE is a paper surface: the photograph would fight it. */
-    final boolean showPicture;
+    /** How strongly the paper veils the picture, 0-255. CREASE keeps the photograph under acrylic. */
+    final int veil;
 
     private Theme(String id, int paper, int ink, int inkRest, int index, int indexRest, int muted,
-                  int faint, int hairline, int wash, int accent, boolean showMarker, boolean showPicture) {
+                  int faint, int hairline, int wash, int accent, boolean showMarker, int veil) {
         this.id = id;
         this.paper = paper;
         this.ink = ink;
@@ -74,7 +74,7 @@ final class Theme {
         this.wash = wash;
         this.accent = accent;
         this.showMarker = showMarker;
-        this.showPicture = showPicture;
+        this.veil = veil;
     }
 
     static Theme of(String id) {
