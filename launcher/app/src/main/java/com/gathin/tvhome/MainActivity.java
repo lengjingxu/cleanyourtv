@@ -243,6 +243,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             protected boolean isLayoutRTL() {
                 return rtlAppGrid;
             }
+
+            /**
+             * RecyclerView scrolls a newly focused child just far enough to be visible, which would
+             * drag the row off the centre line that centerRow() puts it on. The list owns its own
+             * scrolling here, so this always declines.
+             */
+            @Override
+            public boolean requestChildRectangleOnScreen(@NonNull RecyclerView parent, @NonNull View child,
+                                                         @NonNull Rect rect, boolean immediate,
+                                                         boolean focusedChildVisible) {
+                return false;
+            }
         });
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
