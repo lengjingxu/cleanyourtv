@@ -32,13 +32,11 @@ public final class LauncherSettingsActivity extends Activity {
         advancedEffects = config.animations && config.advancedEffects;
 
         themeChoice = findViewById(R.id.themeChoice);
-        themeChoice.setOnClickListener(v -> {
-            // Two looks, one key: tapping flips between the picture and the paper.
-            theme = Theme.CREASE_ID.equals(theme) ? Theme.NIGHT_ID : Theme.CREASE_ID;
-            choices.edit().putString("theme", theme).apply();
+        themeChoice.setOnClickListener(v -> ThemePicker.show(this, Theme.of(theme), Theme.NIGHT, () -> {
+            theme = Config.load(this).theme;
             setResult(RESULT_OK);
             refresh();
-        });
+        }));
         animationsChoice = findViewById(R.id.animationsChoice);
         animationsChoice.setOnClickListener(v -> {
             animations = !animations;
@@ -76,7 +74,7 @@ public final class LauncherSettingsActivity extends Activity {
             open(new Intent(Settings.ACTION_HOME_SETTINGS));
         });
         findViewById(R.id.tvSettingsChoice).setOnClickListener(v ->
-                open(new Intent(Settings.ACTION_SETTINGS)));
+                open(SystemSettings.intent(this, Settings.ACTION_SETTINGS)));
         refresh();
         animationsChoice.requestFocus();
     }

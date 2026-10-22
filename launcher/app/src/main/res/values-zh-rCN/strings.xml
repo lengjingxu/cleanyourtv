@@ -34,4 +34,18 @@
     <string name="cant_open">无法打开 %1$s</string>
     <string name="date_format">M月d日 EEEE</string>
     <string name="dream_name">时钟</string>
+    <string name="appearance_title">外观主题</string>
+    <string name="theme_state">外观主题：%1$s</string>
+    <string name="theme_night">夜色</string>
+    <string name="theme_crease">白纸</string>
+    <string name="theme_night_hint">当前时段的照片，白色文字</string>
+    <string name="theme_crease_hint">照片上覆一层白亚克力，黑色文字，一道红线</string>
+    <string name="module_cards">模块卡片</string>
+    <string name="no_module_cards">没有已安装的模块卡片</string>
+    <string name="quick_picture">显示</string>
+    <string name="quick_network">网络</string>
+    <string name="quick_apps">应用</string>
+    <string name="quick_apps_hint">重新启用</string>
+    <string name="vpn">VPN</string>
+    <string name="vpn_off">VPN 未连接</string>
 </resources>
